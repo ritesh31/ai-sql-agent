@@ -2,14 +2,24 @@
 
 import { useChat } from "@ai-sdk/react";
 import { useState } from "react";
+import { QueryResultTable } from "./components/QueryResultTable";
+import { CopyButton } from "./components/CopyButton";
 
 type AIInput = {
   query: string;
 };
 
-type AIOutputput = {
-  rows: string[];
+type AIOutput = {
+  columns: string[];
+  rows: Record<string, unknown>[];
 };
+
+const SUGGESTED_PROMPTS = [
+  "Show me all products",
+  "Which region had the highest total sales?",
+  "What are the top 5 best-selling products?",
+  "Show products that are low on stock (less than 5 units)",
+];
 
 export default function Chat() {
   const [input, setInput] = useState("");
@@ -35,7 +45,9 @@ export default function Chat() {
                   </div>
                 );
 
-              case "tool-db":
+              case "tool-db": {
+                const input = part.input as unknown as AIInput;
+                const output = part.output as unknown as AIOutput;
                 return (
                   <div
                     key={`${message.id}-${i}`}
@@ -45,22 +57,33 @@ export default function Chat() {
                       🔍 Database Query
                     </div>
 
-                    {(part.input as unknown as AIInput)?.query && (
-                      <pre className="text-xs bg-white dark:bg-zinc-900 p-2 rounded mb-2 overflow-x-auto">
-                        {(part.input as unknown as AIInput).query}
-                      </pre>
-                    )}
-                    {part.state === "output-available" &&
-                      (part.output as unknown as AIOutputput) && (
-                        <div className="text-sm text-green-700 dark:text-green-300">
-                          ✅ Returned{" "}
-                          {(part.output as unknown as AIOutputput).rows
-                            ?.length || 0}{" "}
-                          rows
+                    {input?.query && (
+                      <div className="mb-2">
+                        <div className="flex justify-between items-center mb-1">
+                          <span className="text-xs text-blue-600 dark:text-blue-400 font-medium">SQL</span>
+                          <CopyButton text={input.query} />
                         </div>
-                      )}
+                        <pre className="text-xs bg-white dark:bg-zinc-900 p-2 rounded overflow-x-auto">
+                          {input.query}
+                        </pre>
+                      </div>
+                    )}
+
+                    {part.state === "output-available" && output && (
+                      <>
+                        <div className="text-xs text-green-700 dark:text-green-300 mb-1">
+                          ✅ {output.rows?.length ?? 0} row
+                          {output.rows?.length === 1 ? "" : "s"} returned
+                        </div>
+                        <QueryResultTable
+                          columns={output.columns ?? []}
+                          rows={output.rows ?? []}
+                        />
+                      </>
+                    )}
                   </div>
                 );
+              }
 
               case "tool-schema":
                 return (
@@ -99,6 +122,21 @@ export default function Chat() {
           })}
         </div>
       ))}
+
+      {messages.length === 0 && (
+        <div className="flex flex-col gap-2 mb-6">
+          <p className="text-sm text-zinc-500 dark:text-zinc-400 mb-1">Try asking:</p>
+          {SUGGESTED_PROMPTS.map((prompt) => (
+            <button
+              key={prompt}
+              onClick={() => sendMessage({ text: prompt })}
+              className="text-left px-3 py-2 rounded border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-800 text-sm text-zinc-700 dark:text-zinc-300 transition-colors"
+            >
+              {prompt}
+            </button>
+          ))}
+        </div>
+      )}
 
       <form
         onSubmit={(e) => {

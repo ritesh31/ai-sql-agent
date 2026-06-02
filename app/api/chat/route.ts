@@ -62,7 +62,17 @@ export async function POST(req: Request) {
         }),
         execute: async ({ query }) => {
           console.log('This is query: ', query);
-          return await db.run(query);
+          const result = await db.run(query);
+          const rows = (result.rows ?? []).map((row: unknown) =>
+            (result.columns ?? []).reduce(
+              (acc: Record<string, unknown>, col: string, i: number) => {
+                acc[col] = (row as unknown[])[i];
+                return acc;
+              },
+              {}
+            )
+          );
+          return { columns: result.columns ?? [], rows };
         },
       }),
     },
