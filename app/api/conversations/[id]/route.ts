@@ -56,3 +56,17 @@ export async function POST(
 
   return Response.json({ ok: true });
 }
+
+export async function DELETE(
+  _req: NextRequest,
+  ctx: { params: Promise<{ id: string }> }
+) {
+  const { id } = await ctx.params;
+
+  // Delete conversation (chat_messages cascade delete automatically)
+  await db
+    .delete(conversationsTable)
+    .where(eq(conversationsTable.id, id));
+
+  return Response.json({ ok: true });
+}
