@@ -1,7 +1,7 @@
 "use client";
 
 import { useChat } from "@ai-sdk/react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import type { UIMessage } from "ai";
 import { QueryResultTable } from "./QueryResultTable";
 import { CopyButton } from "./CopyButton";
@@ -32,13 +32,19 @@ function getTitleFromMessages(messages: UIMessage[]): string {
 
 export function ChatInterface({ conversationId, initialMessages, onSaved }: Props) {
   const [input, setInput] = useState("");
+  const [suggestedQuestions, setSuggestedQuestions] = useState<
+    Record<string, string[]>
+  >({});
+  const [loadingQuestions, setLoadingQuestions] = useState<Set<string>>(
+    new Set()
+  );
 
   const { messages, sendMessage } = useChat({
     messages: initialMessages,
     onFinish: async ({ messages: allMessages }) => {
       try {
         const title = getTitleFromMessages(allMessages);
-        console.log('title', title);
+        console.log("title", title);
         await fetch(`/api/conversations/${conversationId}`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -50,6 +56,55 @@ export function ChatInterface({ conversationId, initialMessages, onSaved }: Prop
       }
     },
   });
+
+  // Generate suggested questions for assistant messages
+  useEffect(() => {
+    const generateQuestions = async () => {
+      // Find the last assistant message that doesn't have questions yet
+      const lastAssistantMsg = messages.findLast(
+        (m) => m.role === "assistant" && !suggestedQuestions[m.id]
+      );
+
+      if (!lastAssistantMsg) return;
+      if (loadingQuestions.has(lastAssistantMsg.id)) return;
+
+      // Extract text response from message parts
+      const textPart = lastAssistantMsg.parts?.find((p) => p.type === "text");
+      if (!textPart || textPart.type !== "text") return;
+
+      setLoadingQuestions((prev) => new Set(prev).add(lastAssistantMsg.id));
+
+      try {
+        const response = await fetch("/api/chat/suggested-questions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            messages,
+            lastResponse: textPart.text,
+          }),
+        });
+
+        const data = await response.json();
+        setSuggestedQuestions((prev) => ({
+          ...prev,
+          [lastAssistantMsg.id]: data.questions,
+        }));
+      } catch (e) {
+        console.error("Failed to generate suggested questions:", e);
+      } finally {
+        setLoadingQuestions((prev) => {
+          const next = new Set(prev);
+          next.delete(lastAssistantMsg.id);
+          return next;
+        });
+      }
+    };
+
+    generateQuestions();
+    console.log('messages ', messages)
+    console.log('suggestedQuestions ', suggestedQuestions)
+    console.log('loadingQuestions ', loadingQuestions)
+  }, [messages, suggestedQuestions, loadingQuestions]);
 
   return (
     <div className="flex flex-col flex-1 h-screen overflow-hidden">
@@ -165,6 +220,34 @@ export function ChatInterface({ conversationId, initialMessages, onSaved }: Prop
                     return null;
                 }
               })}
+              {message.role === "assistant" && (
+                <>
+                  {loadingQuestions.has(message.id) && (
+                    <div className="text-sm text-zinc-500 dark:text-zinc-400 mt-4 flex items-center gap-2">
+                      <span className="animate-spin">💡</span>
+                      Finding follow-up questions...
+                    </div>
+                  )}
+                  {suggestedQuestions[message.id] && (
+                    <div className="mt-4 space-y-2">
+                      <p className="text-xs text-zinc-500 dark:text-zinc-400 font-medium">
+                        💡 You might also want to know:
+                      </p>
+                      <div className="space-y-2">
+                        {suggestedQuestions[message.id].map((question, idx) => (
+                          <button
+                            key={idx}
+                            onClick={() => sendMessage({ text: question })}
+                            className="w-full text-left px-3 py-2 rounded border border-blue-200 dark:border-blue-800 hover:bg-blue-50 dark:hover:bg-blue-900/20 text-sm text-blue-700 dark:text-blue-300 transition-colors"
+                          >
+                            {question}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
             </div>
           ))}
         </div>

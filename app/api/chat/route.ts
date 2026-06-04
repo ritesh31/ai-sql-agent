@@ -1,8 +1,8 @@
 import { streamText, UIMessage, convertToModelMessages, tool, stepCountIs } from 'ai';
-import { openai } from '@ai-sdk/openai';
 import { z } from 'zod';
 
 import { db } from "../../../db/db";
+import { model } from "@/lib/ai-config";
 
 export async function POST(req: Request) {
   const { messages }: { messages: UIMessage[] } = await req.json();
@@ -23,7 +23,7 @@ export async function POST(req: Request) {
     Always respond in a helpful, conversational tone while being technically accurate.
   `;
   const result = streamText({
-    model: openai('gpt-4o-mini'),
+    model: model,
     messages: await convertToModelMessages(messages),
     stopWhen: stepCountIs(5),
     system: SYSTEM_PROMPT,
